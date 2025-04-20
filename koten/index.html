@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>古文単語学習サイト</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin: 2rem;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    .hidden { display: none; }
+    .bold-underline { font-weight: bold; text-decoration: underline; }
+    #result-circle { font-size: 5rem; color: red; }
+    button {
+      margin: 1rem;
+      padding: 1rem 2rem;
+      font-size: 1rem;
+      width: 80%;
+      max-width: 300px;
+    }
+    input {
+      font-size: 1.2rem;
+      padding: 0.5rem;
+      width: 80%;
+      max-width: 300px;
+      margin-top: 1rem;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 1rem;
+        margin: 1rem;
+      }
+      #result-circle {
+        font-size: 3rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="home">
+    <h1>古文単語学習</h1>
+    <button onclick="showTestSettings()">テスト</button>
+    <button onclick="startReview()">復習</button>
+    <button onclick="showData()">データ</button>
+  </div>
+
+  <div id="test-settings" class="hidden">
+    <h2>テスト範囲を指定（例：1~30）</h2>
+    <input id="test-range" type="text" placeholder="範囲を入力 (例: 1~30)" />
+    <br />
+    <button onclick="startTest()">開始</button>
+  </div>
+
+  <div id="test" class="hidden">
+    <p id="sentence"></p>
+    <input id="answer" type="text" placeholder="意味を入力" />
+    <br />
+    <button onclick="checkAnswer()">次へ</button>
+    <button onclick="markForget()">忘却</button>
+    <div id="result-circle"></div>
+    <div id="correct-answer"></div>
+  </div>
+
+  <div id="data-view" class="hidden">
+    <h2>学習データ</h2>
+    <div id="data-content"></div>
+    <button onclick="returnHome()">ホームへ戻る</button>
+  </div>
+
+  <script src="words.js"></script>
+  <script>
+    let testWords = [];
+    let currentWordIndex = 0;
+    let correctCount = 0;
+    let testMode = "normal";
+    let reviewData = [];
+    let testHistory = [];
+
+    const shuffle = (array) => array.sort(() => Math.random() - 0.5);
+
+    function showTestSettings() {
+      document.getElementById("home").classList.add("hidden");
+      document.getElementById("test-settings").classList.remove("hidden");
+    }
+
+    function startTest() {
+      const input = document.getElementById("test-range").value.trim();
+      const [start, end] = input.split("~").map(Number);
+      if (isNaN(start) || isNaN(end) || start > end) {
+        alert("正しい範囲を入力してください（例: 1~30）");
+        return;
+      }
+      testWords = shuffle(words.filter(w => w[0] >= start && w[0] <= end));
+      currentWordIndex = 0;
+      correctCount = 0;
+      testMode = "normal";
+      showTestScreen();
+    }
+
+    function startReview() {
+      const mistakeIds = JSON.parse(localStorage.getItem("mistakes")) || [];
+      testWords = shuffle(words.filter(w => mistakeIds.includes(w[4])));
+      if (testWords.length === 0) return alert("復習する単語がありません。まずテストを行ってください。");
+      currentWordIndex = 0;
+      correctCount = 0;
+      testMode = "review";
+      showTestScreen();
+    }
+
+    function showTestScreen() {
+      document.getElementById("home").classList.add("hidden");
+      document.getElementById("test-settings").classList.add("hidden");
+      document.getElementById("test").classList.remove("hidden");
+      document.getElementById("data-view").classList.add("hidden");
+      showNextWord();
+    }
+
+    function showNextWord() {
+      if (currentWordIndex >= testWords.length) {
+        const total = testWords.length;
+        const result = `正解数: ${correctCount} / ${total}`;
+        document.getElementById("sentence").textContent = result;
+        setTimeout(returnHome, 2000);
+        storeTestHistory(correctCount, total);
+        return;
+      }
+      const word = testWords[currentWordIndex];
+      const keyword = word[1];
+      const sentence = word[2].replace(keyword, `<span class='bold-underline'>${keyword}</span>`);
+      document.getElementById("sentence").innerHTML = sentence;
+      document.getElementById("answer").value = "";
+      document.getElementById("result-circle").textContent = "";
+      document.getElementById("correct-answer").textContent = "";
+    }
+
+    function checkAnswer() {
+      const input = document.getElementById("answer").value.trim();
+      const correct = testWords[currentWordIndex][3];
+      if (input === correct) {
+        correctCount++;
+        document.getElementById("result-circle").textContent = "○";
+        setTimeout(() => {
+          currentWordIndex++;
+          showNextWord();
+        }, 1000);
+      } else {
+        recordMistake();
+        document.getElementById("correct-answer").textContent = `正解: ${correct}`;
+        setTimeout(() => {
+          currentWordIndex++;
+          showNextWord();
+        }, 2000);
+      }
+    }
+
+    function markForget() {
+      recordMistake();
+      const correct = testWords[currentWordIndex][3];
+      document.getElementById("correct-answer").textContent = `正解: ${correct}`;
+      setTimeout(() => {
+        currentWordIndex++;
+        showNextWord();
+      }, 2000);
+    }
+
+    function recordMistake() {
+      const id = testWords[currentWordIndex][4];
+      let mistakes = JSON.parse(localStorage.getItem("mistakes")) || [];
+      if (!mistakes.includes(id)) mistakes.push(id);
+      localStorage.setItem("mistakes", JSON.stringify(mistakes));
+    }
+
+    function storeTestHistory(correct, total) {
+      const now = new Date().toLocaleString();
+      testHistory.push({ time: now, correct, total });
+      localStorage.setItem("history", JSON.stringify(testHistory));
+    }
+
+    function showData() {
+      document.getElementById("home").classList.add("hidden");
+      document.getElementById("data-view").classList.remove("hidden");
+      const history = JSON.parse(localStorage.getItem("history")) || [];
+      const content = history.map(h => `<p>${h.time} - ${h.correct}/${h.total}</p>`).join("");
+      document.getElementById("data-content").innerHTML = content || "データがありません。";
+    }
+
+    function returnHome() {
+      document.getElementById("home").classList.remove("hidden");
+      document.getElementById("test-settings").classList.add("hidden");
+      document.getElementById("test").classList.add("hidden");
+      document.getElementById("data-view").classList.add("hidden");
+    }
+  </script>
+</body>
+</html>
